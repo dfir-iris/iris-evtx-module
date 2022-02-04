@@ -22,7 +22,7 @@ import traceback
 from pathlib import Path
 from celery import chain, current_app
 
-from iris_interface.IrisModuleInterface import IrisInterfaceTypes, IrisModuleInterface
+from iris_interface.IrisModuleInterface import IrisPipelineTypes, IrisModuleInterface, IrisModuleTypes
 import iris_interface.IrisInterfaceStatus as InterfaceStatus
 from iris_evtx.EVTXImportDispatcher import ImportDispatcher
 import iris_evtx.IrisEVTXModConfig as interface_conf
@@ -44,6 +44,7 @@ class IrisEVTXInterface(IrisModuleInterface):
     _pipeline_support = interface_conf.pipeline_support
     _pipeline_info = interface_conf.pipeline_info
     _module_configuration = interface_conf.module_configuration
+    _module_type = IrisModuleTypes.module_pipeline
 
     def pipeline_handler(self, pipeline_type, pipeline_data):
         """
@@ -53,11 +54,11 @@ class IrisEVTXInterface(IrisModuleInterface):
         :return:
         """
 
-        if pipeline_type == IrisInterfaceTypes.pipeline_type_import:
+        if pipeline_type == IrisPipelineTypes.pipeline_type_import:
             #  Call the import chain as task chain
             return self.task_files_import(task_args=pipeline_data)
 
-        elif pipeline_type == IrisInterfaceTypes.pipeline_type_update:
+        elif pipeline_type == IrisPipelineTypes.pipeline_type_update:
             # Call the update chain as task chain
             return self.task_files_import(task_args=pipeline_data)
 
