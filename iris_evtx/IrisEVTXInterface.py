@@ -91,10 +91,8 @@ class IrisEVTXInterface(IrisModuleInterface):
 
                     ret = importer.import_files()
                     if not ret:
-                        print("Error", list(self.message_queue))
                         return InterfaceStatus.I2Error(logs=list(self.message_queue))
 
-                    print("Success", list(self.message_queue))
                     return InterfaceStatus.I2Success(logs=list(self.message_queue))
 
                 else:

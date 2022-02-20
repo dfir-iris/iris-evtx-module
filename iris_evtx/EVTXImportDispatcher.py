@@ -224,6 +224,7 @@ class ImportDispatcher(object):
         start_time = time.time()
 
         e2s = Evtx2Splunk()
+
         # We could just pass on self.configuration, but we prefer to format the dict in such way that
         # field names in evtx2splunk will not depend on IrisEVTXModule
         proxies = {
