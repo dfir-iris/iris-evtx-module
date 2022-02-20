@@ -27,10 +27,6 @@ import iris_interface.IrisInterfaceStatus as InterfaceStatus
 from iris_evtx.EVTXImportDispatcher import ImportDispatcher
 import iris_evtx.IrisEVTXModConfig as interface_conf
 
-import logging
-
-log = logging.getLogger('iris')
-
 
 class IrisEVTXInterface(IrisModuleInterface):
     """
@@ -65,16 +61,6 @@ class IrisEVTXInterface(IrisModuleInterface):
         else:
             return InterfaceStatus.I2Error('Unrecognized pipeline type')
 
-    def get_tasks_for_registration(self):
-        """
-        :return: List of tasks to register with Celery
-        """
-        status = self.wrap_task(self.task_files_import)
-        if status.is_success():
-            return status(data=[IrisEVTXInterface])
-        else:
-            return InterfaceStatus.I2Error('No tasks to register')
-
     def pipeline_files_upload(self, base_path, file_handle, case_customer, case_name, is_update):
         """
         Handle the files for a specific
@@ -99,30 +85,27 @@ class IrisEVTXInterface(IrisModuleInterface):
                     importer = ImportDispatcher(task_self=self,
                                                 task_args=task_args,
                                                 evidence_storage=self._evidence_storage,
-                                                configuration=configuration.get_data()
+                                                configuration=configuration.get_data(),
+                                                log=self.log
                                                 )
 
-                    return importer.import_files()
+                    ret = importer.import_files()
+                    if not ret:
+                        print("Error", list(self.message_queue))
+                        return InterfaceStatus.I2Error(logs=list(self.message_queue))
+
+                    print("Success", list(self.message_queue))
+                    return InterfaceStatus.I2Success(logs=list(self.message_queue))
 
                 else:
-                    log.error(configuration.get_message())
+                    self.log.error(logs=[configuration.get_message()])
                     logs = [configuration.get_message()]
             else:
-                log.error('Evidence storage not available')
+                self.log.error('Evidence storage not available')
                 logs = ['Evidence storage not available']
 
-            return InterfaceStatus.iit_report_task_failure(
-                user=task_args['user'],
-                initial=0,
-                case_name=task_args['case_name'],
-                logs=logs
-            )
+            return InterfaceStatus.I2Error(logs=logs)
 
         except Exception as e:
             traceback.print_exc()
-            return InterfaceStatus.iit_report_task_failure(
-                user=task_args['user'],
-                initial=0,
-                case_name=task_args['case_name'],
-                logs=[traceback.print_exc()]
-            )
+            return InterfaceStatus.I2Error(logs=[traceback.print_exc()])

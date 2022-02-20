@@ -20,7 +20,6 @@
 
 # IMPORTS ------------------------------------------------
 import hashlib
-import logging
 import os
 import shutil
 import tempfile
@@ -33,8 +32,6 @@ from pyunpack import Archive
 from evtx2splunk.Evtx2Splunk import Evtx2Splunk
 
 import iris_interface.IrisInterfaceStatus as InterfaceStatus
-
-log = logging.getLogger('iris')
 
 
 # CONTENT ------------------------------------------------
@@ -50,7 +47,7 @@ def decompress_7z(filename, output_dir):
         a.extractall(directory=output_dir, auto_create_dir=True)
 
     except Exception as e:
-        log.warning(e)
+        print(e)
         return False
 
     return True
@@ -61,15 +58,11 @@ class ImportDispatcher(object):
     Allows to dispatch files to each related importers
     """
 
-    def __init__(self, task_self, task_args=None, evidence_storage=None, configuration=None):
+    def __init__(self, task_self, task_args=None, evidence_storage=None, configuration=None, log=None):
         self.task = task_self
         self.evidence_storage = evidence_storage
         self.configuration = configuration
-        self.message_queue = []
-        handler = InterfaceStatus.QueuingHandler(message_queue=self.message_queue,
-                                                 level=logging.INFO,
-                                                 celery_task=task_self)
-        log.addHandler(handler)
+        self.log = log
 
         self.index = task_args['pipeline_args']['index_evtx']
         self.user = task_args['user']
@@ -85,26 +78,14 @@ class ImportDispatcher(object):
         Return a task compatible success object to be passed to the next task
         :return:
         """
-        return InterfaceStatus.iit_report_task_success(
-            user=self.user,
-            initial=self.task.request.id,
-            case_name=self.case_name,
-            logs=list(self.message_queue),
-            data={}
-        )
+        return InterfaceStatus.I2Success
 
     def _ret_task_failure(self):
         """
         Return a task compatible failure object to be passed to the next task
         :return:
         """
-        return InterfaceStatus.iit_report_task_failure(
-            user=self.user,
-            initial=self.task.request.id,
-            case_name=self.case_name,
-            logs=list(self.message_queue),
-            data={}
-        )
+        return InterfaceStatus.I2Error
 
     def import_files(self):
         """
@@ -112,7 +93,7 @@ class ImportDispatcher(object):
         :return:
         """
 
-        log.info("Received new evtx import signal for {}".format(self.case_name))
+        self.log.info("Received new evtx import signal for {}".format(self.case_name))
 
         temp_zippath = tempfile.TemporaryDirectory()
         shutil.move(str(self.path), temp_zippath.name)
@@ -121,7 +102,7 @@ class ImportDispatcher(object):
 
         import_list = self._create_import_list(path=self.path)
 
-        ret = self._ret_task_success()
+        ret = None
         if import_list:
 
             for data_type in import_list:
@@ -129,32 +110,16 @@ class ImportDispatcher(object):
                 ret_t = self.inner_import_files(import_list[data_type], data_type)
 
                 # Merge the result with the current caller
-                ret.merge_task_results(ret_t, is_update=self.is_update)
+                ret = InterfaceStatus.merge_status(ret, ret_t)
 
         else:
 
-            log.error("Import list was empty. Please check previous errors.")
-            log.error("Either internal error, either the files could not be uploaded successfully.")
-            log.error("Nothing to import")
+            self.log.error("Import list was empty. Please check previous errors.")
+            self.log.error("Either internal error, either the files could not be uploaded successfully.")
+            self.log.error("Nothing to import")
             ret = self._ret_task_failure()
 
         return ret
-
-    def _merge_task_results(self, base_ret, new_ret, type):
-        """
-        Merge the result of multiple tasks
-        :param base_ret: Task return to merge
-        :return:
-        """
-        # Set the overall task success at false if any of the task failed
-        base_ret['success'] = new_ret['success'] and base_ret['success']
-
-        # Concatenate the tasks logs to display everything at the end
-        base_ret['logs'] += new_ret['logs']
-
-        base_ret['data']['is_update'] = self.is_update
-
-        return base_ret
 
     def _create_import_list(self, path=None):
         """
@@ -165,8 +130,8 @@ class ImportDispatcher(object):
         import_list = {
         }
 
-        log.info("Checking input files")
-        log.info("Path is {}".format(path))
+        self.log.info("Checking input files")
+        self.log.info("Path is {}".format(path))
 
         if path.is_dir():
             for entry in path.iterdir():
@@ -209,20 +174,20 @@ class ImportDispatcher(object):
                             if not is_valid:
                                 try:
                                     entry.unlink()
-                                    log.debug(entry)
+                                    self.log.debug(entry)
                                 except Exception:
                                     pass
-                                log.info("File has been deleted from the server")
+                                self.log.info("File has been deleted from the server")
 
                         else:
                             entry.unlink()
-                            log.warning("{} was already imported".format(entry))
+                            self.log.warning("{} was already imported".format(entry))
 
             # log.info("Detected {} valid files".format(len(import_list)))
             return import_list
 
         else:
-            log.error("Internal error. Provided path is not a path")
+            self.log.error("Internal error. Provided path is not a path")
             return None
 
     def inner_import_files(self, import_list: list, files_type):
@@ -233,10 +198,10 @@ class ImportDispatcher(object):
         :return: True if imported, false if not + list of errors
         """
 
-        log.info("New imports for {} on behalf of {}".format(self.case_name, self.user))
-        log.info("{} files of type {} to import into {}".format(len(import_list), files_type, self.index))
+        self.log.info("New imports for {} on behalf of {}".format(self.case_name, self.user))
+        self.log.info("{} files of type {} to import into {}".format(len(import_list), files_type, self.index))
 
-        log.info("Starting processing of files")
+        self.log.info("Starting processing of files")
 
         in_path = import_list[0].parent
         # Temporary files are placed in the same directory, not in tmp as there is a
@@ -253,7 +218,7 @@ class ImportDispatcher(object):
         elif files_type == "evtx":
             in_path_evtx = in_path
         else:
-            log.error("Unexpected file type, aborting...")
+            self.log.error("Unexpected file type, aborting...")
             return self._ret_task_failure()
 
         start_time = time.time()
@@ -288,7 +253,7 @@ class ImportDispatcher(object):
 
         end_time = time.time()
 
-        log.info("Finished in {time}".format(time=end_time - start_time))
+        self.log.info("Finished in {time}".format(time=end_time - start_time))
 
         if ret_t is False:
             return self._ret_task_failure()
