@@ -20,8 +20,8 @@
 
 module_name = "Evtx2Splunk"
 module_description = "Provides handling of Windows EVTX files and ingest them into Splunk"
-interface_version = 1.1
-module_version = 1.1
+interface_version = "1.2.0"
+module_version = "1.2.0"
 pipeline_support = True
 pipeline_info = {
     "pipeline_internal_name": "evtx_pipeline",

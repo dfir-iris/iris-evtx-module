@@ -24,7 +24,7 @@ import setuptools
 
 setuptools.setup(
      name='iris_evtx',
-     version='1.1',
+     version='1.2.0',
      packages=['iris_evtx'],
      author="Airbus CyberSecurity",
      author_email="ir@cyberactionlab.net",
