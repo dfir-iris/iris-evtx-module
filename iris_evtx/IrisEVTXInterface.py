@@ -20,12 +20,13 @@
 
 import traceback
 from pathlib import Path
-from celery import chain, current_app
+from werkzeug.utils import secure_filename
 
-from iris_interface.IrisModuleInterface import IrisPipelineTypes, IrisModuleInterface, IrisModuleTypes
 import iris_interface.IrisInterfaceStatus as InterfaceStatus
-from iris_evtx.EVTXImportDispatcher import ImportDispatcher
+from iris_interface.IrisModuleInterface import IrisPipelineTypes, IrisModuleInterface, IrisModuleTypes
+
 import iris_evtx.IrisEVTXModConfig as interface_conf
+from iris_evtx.EVTXImportDispatcher import ImportDispatcher
 
 
 class IrisEVTXInterface(IrisModuleInterface):
@@ -68,7 +69,9 @@ class IrisEVTXInterface(IrisModuleInterface):
         """
 
         if base_path and Path(base_path).is_dir:
-            file_handle.save(Path(base_path, file_handle.filename))
+            # Sanitize the filename
+            file_name = secure_filename(file_handle.filename)
+            file_handle.save(Path(base_path, file_name))
             return InterfaceStatus.I2Success("Successfully saved file {} to {}".format(file_handle.filename, base_path))
 
         else:

@@ -3,3 +3,4 @@ celery~=4.4.7
 pyunpack~=0.2.2
 evtx2splunk~=2.0.1
 iris_interface==1.2.0
+werkzeug
